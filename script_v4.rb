@@ -16,5 +16,4 @@ end
 
 url = ARGV[0]
 
-puts url
 puts rails_version(url).inspect

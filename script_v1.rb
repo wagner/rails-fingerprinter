@@ -14,9 +14,7 @@ end
 url = ARGV[0]
 
 if rails?(url)
-  print "✅"
+  puts "✅"
 else
-  print "❌"
+  puts "❌"
 end
-
-puts " #{url}"
