@@ -2,7 +2,7 @@
 
 Identify Ruby on Rails version on remote deployments without source code access.
 
-This code was created as a proof of concept for a talk I gave at RubyConf Brazil 2021 ("Exploring vulnerabilities on Rails apps").
+This code was created as a proof of concept for a talk I gave at RubyConf Brazil 2021: ["Exploring vulnerabilities on Rails apps"](https://docs.google.com/presentation/d/1uo9HnTKWsfpayu_HjxMe9YjWLlVuR7xD02ixmUrHMDs/edit?usp=sharing) (slides are in pt-BR).
 
 If you are interested in server fingerprinting or pentesting in general, check the [awesome-pentest](https://github.com/enaqx/awesome-pentest) repository for more tools.
 
