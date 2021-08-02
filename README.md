@@ -15,6 +15,9 @@ $ ruby fingerprinter.rb https://whatever.com
 
 ```
 
-## Contributing
-I have no intention to update or maintain this script as it was created as a proof of concept only.
+## About
+
+This script was created by [Wagner Narde](https://github.com/wagner).
+
+I have no intention to update or maintain this script as it was created only as a proof of concept.
 Feel free to fork and modify it. No need for credits.

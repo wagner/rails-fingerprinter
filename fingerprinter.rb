@@ -1,17 +1,18 @@
-# Extraindo as lógicas de verificação
-
 require 'net/http'
+require 'json'
 require 'digest'
 
 OK = "✅"
 NOK = "❌"
+VERSIONS_LOCATION = "https://rubygems.org/api/v1/versions/rails.json"
+VERSIONS_FILE = "versions.tmp"
 
 MATCHES = [
   # Asset pipeline
-  { name: "Asset pipeline JS with 32 chars", type: :regexp, source: :body, value: /application-\w{32}?\.js/, version: [">=3.1", "<5.1"] },
-  { name: "Asset pipeline CSS with 32 chars", type: :regexp, source: :body, value: /application-\w{32}?\.css/, version: [">=3.1", "<5.1"] },
-  { name: "Asset pipeline JS with 64 chars", type: :regexp, source: :body, value: /application-\w{64}?\.js/, version: [">=5.1"] },
-  { name: "Asset pipeline CSS with 64 chars", type: :regexp, source: :body, value: /application-\w{64}?\.css/, version: [">=5.1"] },
+  { name: "Asset pipeline JS with 32 chars", type: :regexp, source: :body, value: /-[a-f0-9]{32}?\.js/, version: [">=3.1", "<5.1"] },
+  { name: "Asset pipeline CSS with 32 chars", type: :regexp, source: :body, value: /-[a-f0-9]{32}?\.css/, version: [">=3.1", "<5.1"] },
+  { name: "Asset pipeline JS with 64 chars", type: :regexp, source: :body, value: /-[a-f0-9]{64}?\.js/, version: [">=5.1"] },
+  { name: "Asset pipeline CSS with 64 chars", type: :regexp, source: :body, value: /-[a-f0-9]{64}?\.css/, version: [">=5.1"] },
 
   # CSRF meta tag
   { name: "CSRF meta tag", type: :regexp, source: :body, value: /<meta name="csrf-token" content="/, version: [">=3.0.20"]},
@@ -39,11 +40,11 @@ def perform_match(match, source)
   when :md5
     match_md5(source, match[:value])
   else
-    fail "Matcher not found: #{match[:type]}"
+    raise "Matcher not found: #{match[:type]}"
   end
 end
 
-def match_source(match, response, uri)
+def match_source(match, response, location)
   case match[:source]
   when :body
     response.body
@@ -51,10 +52,11 @@ def match_source(match, response, uri)
     response[match[:header]]
   when :path
     @response_cache ||= {}
+    uri = URI(location)
     address = URI("#{uri.scheme}://#{uri.host}:#{uri.port}#{match[:path]}")
-    @response_cache[address] ||= get(address).body
+    @response_cache[address] ||= get(address, false).body
   else
-    fail "Source not found: #{match[:source]}"
+    raise "Source not found: #{match[:source]}"
   end
 end
 
@@ -66,20 +68,32 @@ def match_md5(source, hash)
   Digest::MD5.hexdigest(source) == hash
 end
 
-def get(uri)
+def get(location, follow_redirect=true, limit=10)
+  raise ArgumentError, "Too many HTTP redirects" if limit == 0
+
+  uri = URI(location)
   http = Net::HTTP.new(uri.host, uri.port)
-  http.use_ssl = true
+  http.use_ssl = true if uri.scheme == "https"
   http.verify_mode = OpenSSL::SSL::VERIFY_NONE
 
   request = Net::HTTP::Get.new(uri.request_uri)
-  http.request(request)
+  response = http.request(request)
+
+  case response
+  when follow_redirect && Net::HTTPRedirection
+    location = response['location']
+    warn "Redirected to #{location}"
+    get(location, limit - 1)
+  else
+    response
+  end
 end
 
-def perform_matches(uri)
-  response = get(uri)
+def perform_matches(location)
+  response = get(location)
 
   MATCHES.map do |match|
-    source = match_source(match, response, uri)
+    source = match_source(match, response, location)
     result = perform_match(match, source)
 
     { match: match, result: result }
@@ -100,8 +114,24 @@ def print_results(results)
   end
 end
 
+def generate_rails_versions_array
+  if File.exist?(VERSIONS_FILE) && !File.zero?(VERSIONS_FILE)
+    print "Retrieving cache"
+    content = File.open(VERSIONS_FILE).read
+  else
+    print "Caching versions"
+    content = get(VERSIONS_LOCATION).body
+    File.open(VERSIONS_FILE, "w").write(content)
+  end
+
+  versions = JSON.parse(content).map { |release| Gem::Version.new(release["number"]) }
+  puts " (#{versions.size} releases)"
+
+  versions
+end
+
 def predicted_versions(results)
-  rails_versions = File.open("rails_versions.txt").readlines.map{ |line| Gem::Version.new(line.chomp) }
+  rails_versions = generate_rails_versions_array
   positive_results = results.find_all{ |result| result[:result] }
 
   return [] if positive_results.empty?
@@ -121,13 +151,13 @@ def print_versions(versions)
   if versions.empty?
     puts "Could not predict Rails version"
   else
-    puts "Predicted Rails versions: "
+    puts "Predicted Rails versions (#{versions.size} releases): "
     puts versions.join(", ")
   end
 end
 
-uri = URI(ARGV[0])
-results = perform_matches(uri)
+location = ARGV[0]
+results = perform_matches(location)
 print_results(results)
 
 puts "\n"
